@@ -22,33 +22,38 @@ app.use(morgan("combined"));
 // Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 دقيقة
-    max: 100, // الحد الأقصى للطلبات
+    max: 100,
     message: "تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
 // الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
-  .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
+    .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
+    .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
 
-// تعريف نموذج البيانات
+// نموذج البيانات المحدث
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
-    power: Number,
+    voltage: Number,
+    current_20A: Number,
+    current_30A: Number,
+    sct013: Number,
+    waterFlow: Number,
+    gasDetected: Boolean,
     timestamp: { type: Date, default: Date.now }
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// الاتصال بخادم MQTT
+// الاتصال بـ MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
     client.subscribe("maison/energie");
 });
 
-// استقبال البيانات من MQTT وتخزينها في MongoDB
+// استقبال البيانات من MQTT
 client.on("message", (topic, message) => {
     try {
         let data = JSON.parse(message.toString());
@@ -59,11 +64,12 @@ client.on("message", (topic, message) => {
     }
 });
 
-// نقاط النهاية API
+// نقطة البداية
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل بنجاح!");
 });
 
+// جلب آخر البيانات
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(10);
@@ -73,17 +79,33 @@ app.get("/energy", async (req, res) => {
     }
 });
 
+// إرسال البيانات يدويًا
 app.post("/energy", async (req, res) => {
     const { error } = Joi.object({
-        temperature: Joi.number().required(),
-        humidity: Joi.number().required(),
-        power: Joi.number().required()
+        temperature: Joi.number(),
+        humidity: Joi.number(),
+        voltage: Joi.number(),
+        current_20A: Joi.number(),
+        current_30A: Joi.number(),
+        sct013: Joi.number(),
+        waterFlow: Joi.number(),
+        gasDetected: Joi.boolean()
     }).validate(req.body);
+
     if (error) return res.status(400).send(error.details[0].message);
 
     try {
-        const { temperature, humidity, power } = req.body;
-        const newData = new EnergyModel({ temperature, humidity, power });
+        const { temperature, humidity, voltage, current_20A, current_30A, sct013, waterFlow, gasDetected } = req.body;
+        const newData = new EnergyModel({
+            temperature,
+            humidity,
+            voltage,
+            current_20A,
+            current_30A,
+            sct013,
+            waterFlow,
+            gasDetected
+        });
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
@@ -91,14 +113,14 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// Swagger Documentation
+// Swagger التوثيق
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
         info: {
             title: "API إدارة الطاقة",
             version: "1.0.0",
-            description: "API لجمع وعرض بيانات استهلاك الطاقة"
+            description: "API لجمع وعرض بيانات استهلاك الطاقة وكشف الغاز"
         },
         servers: [{ url: "http://localhost:5000" }]
     },
