@@ -13,26 +13,26 @@ const Joi = require("joi");
 const app = express();
 const PORT = 5000;
 
-// Middleware
+// ✅ Middleware
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Rate Limiting
+// ✅ Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 دقيقة
     max: 100,
-    message: "تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
+    message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// الاتصال بقاعدة البيانات MongoDB
+// ✅ الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
-    .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
+    .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// نموذج البيانات المحدث
+// ✅ تعريف نموذج البيانات
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -46,40 +46,53 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// الاتصال بـ MQTT
+// ✅ الاتصال بـ MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
+
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
-    client.subscribe("maison/energie");
+    client.subscribe("maison/energie", (err) => {
+        if (err) {
+            console.error("❌ خطأ في الاشتراك بالموضوع:", err);
+        }
+    });
 });
 
-// استقبال البيانات من MQTT
+// ✅ استقبال البيانات من MQTT وتخزينها
 client.on("message", (topic, message) => {
     try {
         let data = JSON.parse(message.toString());
-        let newData = new EnergyModel(data);
-        newData.save().then(() => console.log("📊 تم تسجيل البيانات بنجاح!"));
+
+        if (data.temperature !== undefined && data.humidity !== undefined) {
+            const newData = new EnergyModel(data);
+            newData.save()
+                .then(() => console.log("📊 تم تسجيل البيانات بنجاح!"))
+                .catch(err => console.error("❌ خطأ أثناء الحفظ:", err));
+        } else {
+            console.warn("⚠️ تم استقبال بيانات غير مكتملة عبر MQTT:", data);
+        }
+
     } catch (error) {
-        console.error("⚠️ خطأ في معالجة البيانات:", error);
+        console.error("⚠️ خطأ في معالجة بيانات MQTT:", error);
     }
 });
 
-// نقطة البداية
+// ✅ نقطة اختبار الخادم
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل بنجاح!");
 });
 
-// جلب آخر البيانات
+// ✅ عرض آخر 10 قياسات
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(10);
         res.json(data);
     } catch (error) {
-        res.status(500).send("خطأ في جلب البيانات.");
+        res.status(500).send("❌ خطأ في جلب البيانات.");
     }
 });
 
-// إرسال البيانات يدويًا
+// ✅ إضافة بيانات يدويًا عبر POST
 app.post("/energy", async (req, res) => {
     const { error } = Joi.object({
         temperature: Joi.number(),
@@ -109,18 +122,18 @@ app.post("/energy", async (req, res) => {
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
-        res.status(500).send("خطأ أثناء حفظ البيانات.");
+        res.status(500).send("❌ خطأ أثناء حفظ البيانات.");
     }
 });
 
-// Swagger التوثيق
+// ✅ توثيق Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
         info: {
-            title: "API إدارة الطاقة",
+            title: "API إدارة الطاقة وكشف الغاز",
             version: "1.0.0",
-            description: "API لجمع وعرض بيانات استهلاك الطاقة وكشف الغاز"
+            description: "API لجمع، عرض، وإدارة بيانات استهلاك الطاقة وكشف الغاز من المنزل الذكي."
         },
         servers: [{ url: "http://localhost:5000" }]
     },
@@ -129,7 +142,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// تشغيل الخادم
+// ✅ تشغيل الخادم
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
