@@ -13,26 +13,26 @@ const Joi = require("joi");
 const app = express();
 const PORT = 5000;
 
-// ✅ Middleware
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// ✅ Rate Limiting
+// Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 دقيقة
     max: 100,
-    message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
+    message: "تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// ✅ الاتصال بقاعدة البيانات MongoDB
+// الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
-    .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
+    .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
 
-// ✅ تعريف نموذج البيانات
+// تعريف نموذج البيانات
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -46,53 +46,66 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// ✅ الاتصال بـ MQTT
+// الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
-    client.subscribe("maison/energie", (err) => {
-        if (err) {
-            console.error("❌ خطأ في الاشتراك بالموضوع:", err);
-        }
-    });
+    client.subscribe("maison/energie"); // عدل اسم التوبيك حسب ما تستعمله في ESP32
 });
 
-// ✅ استقبال البيانات من MQTT وتخزينها
+// استقبال البيانات من MQTT وتخزينها في MongoDB
 client.on("message", (topic, message) => {
     try {
         let data = JSON.parse(message.toString());
 
-        if (data.temperature !== undefined && data.humidity !== undefined) {
-            const newData = new EnergyModel(data);
-            newData.save()
-                .then(() => console.log("📊 تم تسجيل البيانات بنجاح!"))
-                .catch(err => console.error("❌ خطأ أثناء الحفظ:", err));
-        } else {
-            console.warn("⚠️ تم استقبال بيانات غير مكتملة عبر MQTT:", data);
-        }
+        const {
+            temperature,
+            humidity,
+            voltage,
+            current_20A,
+            current_30A,
+            sct013,
+            waterFlow,
+            gasDetected
+        } = data;
+
+        const newEntry = new EnergyModel({
+            temperature: temperature !== undefined ? temperature : null,
+            humidity: humidity !== undefined ? humidity : null,
+            voltage: voltage !== undefined ? voltage : null,
+            current_20A: current_20A !== undefined ? current_20A : null,
+            current_30A: current_30A !== undefined ? current_30A : null,
+            sct013: sct013 !== undefined ? sct013 : null,
+            waterFlow: waterFlow !== undefined ? waterFlow : null,
+            gasDetected: gasDetected !== undefined ? gasDetected : false
+        });
+
+        newEntry.save()
+            .then(() => console.log("✅ تم حفظ بيانات MQTT بنجاح:", newEntry))
+            .catch(err => console.error("❌ خطأ أثناء حفظ البيانات:", err));
 
     } catch (error) {
-        console.error("⚠️ خطأ في معالجة بيانات MQTT:", error);
+        console.error("⚠️ خطأ في تحويل رسالة MQTT إلى JSON:", error);
     }
 });
 
-// ✅ نقطة اختبار الخادم
+// نقطة البداية (اختبار الخادم)
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل بنجاح!");
 });
 
-// ✅ عرض آخر 10 قياسات
+// جلب آخر 10 سجلات من قاعدة البيانات
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(10);
         res.json(data);
     } catch (error) {
-        res.status(500).send("❌ خطأ في جلب البيانات.");
+        res.status(500).send("خطأ في جلب البيانات.");
     }
 });
 
-// ✅ إضافة بيانات يدويًا عبر POST
+// استقبال بيانات يدويًا عبر POST
 app.post("/energy", async (req, res) => {
     const { error } = Joi.object({
         temperature: Joi.number(),
@@ -122,18 +135,18 @@ app.post("/energy", async (req, res) => {
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
-        res.status(500).send("❌ خطأ أثناء حفظ البيانات.");
+        res.status(500).send("خطأ أثناء حفظ البيانات.");
     }
 });
 
-// ✅ توثيق Swagger
+// إعداد Swagger لتوثيق الـ API
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
         info: {
             title: "API إدارة الطاقة وكشف الغاز",
             version: "1.0.0",
-            description: "API لجمع، عرض، وإدارة بيانات استهلاك الطاقة وكشف الغاز من المنزل الذكي."
+            description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
         },
         servers: [{ url: "http://localhost:5000" }]
     },
@@ -142,7 +155,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// ✅ تشغيل الخادم
+// تشغيل الخادم
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
