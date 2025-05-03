@@ -121,7 +121,7 @@ app.post("/energy", async (req, res) => {
     if (error) return res.status(400).send(error.details[0].message);
 
     try {
-        const { temperature, humidity, voltage, current_20A, current_30A, sct013, waterFlow, gasDetected } = req.body;
+        const { temperature, humidity, voltage, current_20A, current_30A, sct013, gasDetected, waterFlow  } = req.body;
         const newData = new EnergyModel({
             temperature,
             humidity,
