@@ -41,7 +41,8 @@ const EnergySchema = new mongoose.Schema({
     current_30A: Number,
     sct013: Number,
     waterFlow: Number,
-    gasDetected: Boolean,
+    gasDetected: Number,
+    level: Number,
     timestamp: { type: Date, default: Date.now }
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
@@ -67,7 +68,8 @@ client.on("message", (topic, message) => {
             current_30A,
             sct013,
             waterFlow,
-            gasDetected
+            gasDetected,
+            level
         } = data;
 
         const newEntry = new EnergyModel({
@@ -78,7 +80,9 @@ client.on("message", (topic, message) => {
             current_30A: current_30A !== undefined ? current_30A : null,
             sct013: sct013 !== undefined ? sct013 : null,
             waterFlow: waterFlow !== undefined ? waterFlow : null,
-            gasDetected: gasDetected !== undefined ? gasDetected : false
+            gasDetected: gasDetected !== undefined ? gasDetected : null,
+              level : level !== undefined ? level : null,
+
         });
 
         newEntry.save()
@@ -115,7 +119,10 @@ app.post("/energy", async (req, res) => {
         current_30A: Joi.number(),
         sct013: Joi.number(),
         waterFlow: Joi.number(),
-        gasDetected: Joi.boolean()
+        gasDetected: Joi.number()
+                level: Joi.number()
+
+        
     }).validate(req.body);
 
     if (error) return res.status(400).send(error.details[0].message);
@@ -131,6 +138,7 @@ app.post("/energy", async (req, res) => {
             sct013,
             waterFlow,
             gasDetected,
+            level,
         });
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
