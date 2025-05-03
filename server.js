@@ -130,7 +130,7 @@ app.post("/energy", async (req, res) => {
             current_30A,
             sct013,
             waterFlow,
-            gasDetected
+            gasDetected,
         });
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
