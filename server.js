@@ -21,18 +21,21 @@ app.use(morgan("combined"));
 
 // Rate Limiting
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 دقيقة
+    windowMs: 15 * 60 * 1000,
     max: 1000,
     message: "تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// الاتصال بقاعدة البيانات MongoDB
-mongoose.connect(process.env.MONGO_URI)
+// Connexion à MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+})
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
     .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
 
-// تعريف نموذج البيانات
+// Schéma Mongoose
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -41,48 +44,35 @@ const EnergySchema = new mongoose.Schema({
     current_30A: Number,
     sct013: Number,
     waterFlow: Number,
-    gasDetected: Number,
+    gasDetected: Number, // <- ici en Number
     level: Number,
     timestamp: { type: Date, default: Date.now }
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// الاتصال بخادم MQTT
+// Connexion au broker MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
-    client.subscribe("maison/energie"); // عدل اسم التوبيك حسب ما تستعمله في ESP32
+    client.subscribe("maison/energie"); // Adapte selon ton ESP32
 });
 
-// استقبال البيانات من MQTT وتخزينها في MongoDB
+// Réception et enregistrement des données MQTT
 client.on("message", (topic, message) => {
     try {
-        let data = JSON.parse(message.toString());
-
-        const {
-            temperature,
-            humidity,
-            voltage,
-            current_20A,
-            current_30A,
-            sct013,
-            waterFlow,
-            gasDetected,
-            level
-        } = data;
+        const data = JSON.parse(message.toString());
 
         const newEntry = new EnergyModel({
-            temperature: temperature !== undefined ? temperature : null,
-            humidity: humidity !== undefined ? humidity : null,
-            voltage: voltage !== undefined ? voltage : null,
-            current_20A: current_20A !== undefined ? current_20A : null,
-            current_30A: current_30A !== undefined ? current_30A : null,
-            sct013: sct013 !== undefined ? sct013 : null,
-            waterFlow: waterFlow !== undefined ? waterFlow : null,
-            gasDetected: gasDetected !== undefined ? gasDetected : null,
-              level : level !== undefined ? level : null,
-
+            temperature: data.temperature ?? null,
+            humidity: data.humidity ?? null,
+            voltage: data.voltage ?? null,
+            current_20A: data.current_20A ?? null,
+            current_30A: data.current_30A ?? null,
+            sct013: data.sct013 ?? null,
+            waterFlow: data.waterFlow ?? null,
+            gasDetected: data.gasDetected ?? null, // <- en nombre
+            level: data.level ?? null
         });
 
         newEntry.save()
@@ -94,12 +84,12 @@ client.on("message", (topic, message) => {
     }
 });
 
-// نقطة البداية (اختبار الخادم)
+// Endpoint racine
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل بنجاح!");
 });
 
-// جلب آخر 10 سجلات من قاعدة البيانات
+// Récupérer les 10 dernières entrées
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(10);
@@ -109,9 +99,9 @@ app.get("/energy", async (req, res) => {
     }
 });
 
-// استقبال بيانات يدويًا عبر POST
+// Enregistrement manuel via POST
 app.post("/energy", async (req, res) => {
-    const { error } = Joi.object({
+    const schema = Joi.object({
         temperature: Joi.number(),
         humidity: Joi.number(),
         voltage: Joi.number(),
@@ -119,27 +109,15 @@ app.post("/energy", async (req, res) => {
         current_30A: Joi.number(),
         sct013: Joi.number(),
         waterFlow: Joi.number(),
-        gasDetected: Joi.number()
-                level: Joi.number()
+        gasDetected: Joi.number(), // <- ici aussi en number
+        level: Joi.number()
+    });
 
-        
-    }).validate(req.body);
-
+    const { error } = schema.validate(req.body);
     if (error) return res.status(400).send(error.details[0].message);
 
     try {
-        const { temperature, humidity, voltage, current_20A, current_30A, sct013, gasDetected, waterFlow  } = req.body;
-        const newData = new EnergyModel({
-            temperature,
-            humidity,
-            voltage,
-            current_20A,
-            current_30A,
-            sct013,
-            waterFlow,
-            gasDetected,
-            level,
-        });
+        const newData = new EnergyModel(req.body);
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
@@ -147,7 +125,7 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// إعداد Swagger لتوثيق الـ API
+// Documentation Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -163,7 +141,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// تشغيل الخادم
+// Lancer le serveur
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
