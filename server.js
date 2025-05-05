@@ -19,30 +19,27 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Rate Limiting
+// Limiteur de requêtes
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 minutes
     max: 1000,
-    message: "تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
+    message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// Connexion à MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true
-})
+// Connexion MongoDB (sans options obsolètes)
+mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
-    .catch(err => console.error("خطأ في الاتصال بقاعدة البيانات:", err));
+    .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Schéma Mongoose
+// Schéma des données
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
     voltage: Number,
     current_20A: Number,
     current_30A: Number,
-    Irms: Number, // remplacé sct013 par Irms
+    sct013: Number,
     waterFlow: Number,
     gasDetected: Number,
     level: Number,
@@ -58,7 +55,6 @@ client.on("connect", () => {
     client.subscribe("maison/energie");
 });
 
-// Réception et enregistrement des données MQTT
 client.on("message", (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
@@ -69,7 +65,7 @@ client.on("message", (topic, message) => {
             voltage: data.voltage ?? null,
             current_20A: data.current_20A ?? null,
             current_30A: data.current_30A ?? null,
-            Irms: data.Irms ?? null, // modifié ici aussi
+            sct013: data.sct013 ?? null,
             waterFlow: data.waterFlow ?? null,
             gasDetected: data.gasDetected ?? null,
             level: data.level ?? null
@@ -84,12 +80,11 @@ client.on("message", (topic, message) => {
     }
 });
 
-// Endpoint racine
+// Routes HTTP
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل بنجاح!");
 });
 
-// Récupérer les 10 dernières entrées
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(10);
@@ -99,7 +94,6 @@ app.get("/energy", async (req, res) => {
     }
 });
 
-// Enregistrement manuel via POST
 app.post("/energy", async (req, res) => {
     const schema = Joi.object({
         temperature: Joi.number(),
@@ -107,7 +101,7 @@ app.post("/energy", async (req, res) => {
         voltage: Joi.number(),
         current_20A: Joi.number(),
         current_30A: Joi.number(),
-        Irms: Joi.number(), // modifié ici aussi
+        sct013: Joi.number(),
         waterFlow: Joi.number(),
         gasDetected: Joi.number(),
         level: Joi.number()
@@ -125,7 +119,7 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// Documentation Swagger
+// Swagger API Docs
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -134,14 +128,14 @@ const swaggerOptions = {
             version: "1.0.0",
             description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
         },
-        servers: [{ url: "http://localhost:5000" }]
+        servers: [{ url: `http://localhost:${PORT}` }]
     },
     apis: ["server.js"]
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Lancer le serveur
+// Démarrage du serveur
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
