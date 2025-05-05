@@ -1,4 +1,3 @@
-Mohamed Hachem Chaabi, [03/05/2025 14:32]
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -12,7 +11,7 @@ const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors());
@@ -43,9 +42,9 @@ const EnergySchema = new mongoose.Schema({
     voltage: Number,
     current_20A: Number,
     current_30A: Number,
-    sct013: Number,
+    Irms: Number, // remplacé sct013 par Irms
     waterFlow: Number,
-    gasDetected: Number, // <- ici en Number
+    gasDetected: Number,
     level: Number,
     timestamp: { type: Date, default: Date.now }
 });
@@ -56,7 +55,7 @@ const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
-    client.subscribe("maison/energie"); // Adapte selon ton ESP32
+    client.subscribe("maison/energie");
 });
 
 // Réception et enregistrement des données MQTT
@@ -70,9 +69,9 @@ client.on("message", (topic, message) => {
             voltage: data.voltage ?? null,
             current_20A: data.current_20A ?? null,
             current_30A: data.current_30A ?? null,
-            sct013: data.sct013 ?? null,
+            Irms: data.Irms ?? null, // modifié ici aussi
             waterFlow: data.waterFlow ?? null,
-            gasDetected: data.gasDetected ?? null, // <- en nombre
+            gasDetected: data.gasDetected ?? null,
             level: data.level ?? null
         });
 
@@ -108,9 +107,9 @@ app.post("/energy", async (req, res) => {
         voltage: Joi.number(),
         current_20A: Joi.number(),
         current_30A: Joi.number(),
-        sct013: Joi.number(),
+        Irms: Joi.number(), // modifié ici aussi
         waterFlow: Joi.number(),
-        gasDetected: Joi.number(), // <- ici aussi en number
+        gasDetected: Joi.number(),
         level: Joi.number()
     });
 
@@ -126,7 +125,6 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-Mohamed Hachem Chaabi, [03/05/2025 14:32]
 // Documentation Swagger
 const swaggerOptions = {
     definition: {
@@ -145,5 +143,5 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Lancer le serveur
 app.listen(PORT, () => {
-    console.log(🚀 الخادم يعمل على http://localhost:${PORT});
+    console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
