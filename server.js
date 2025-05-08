@@ -9,6 +9,7 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
+const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,7 +28,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Connexion MongoDB (sans options obsolètes)
+// Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
@@ -116,6 +117,41 @@ app.post("/energy", async (req, res) => {
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
         res.status(500).send("خطأ أثناء حفظ البيانات.");
+    }
+});
+
+// Fonction pour communiquer avec OpenAI
+async function askOpenAI(question) {
+    try {
+        const response = await axios.post('https://api.openai.com/v1/completions', {
+            model: "text-davinci-003",
+            prompt: question,
+            max_tokens: 150
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        return response.data.choices[0].text.trim();
+    } catch (error) {
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error);
+        throw new Error('Erreur de communication avec OpenAI');
+    }
+}
+
+// Endpoint pour interroger OpenAI
+app.post("/chatbot", async (req, res) => {
+    const { question } = req.body;
+    if (!question) {
+        return res.status(400).send("يرجى إرسال سؤال.");
+    }
+
+    try {
+        const answer = await askOpenAI(question);
+        res.json({ answer });
+    } catch (error) {
+        res.status(500).send("❌ خطأ أثناء الحصول على الإجابة من OpenAI.");
     }
 });
 
