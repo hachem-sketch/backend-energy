@@ -117,9 +117,10 @@ app.post("/energy", async (req, res) => {
 });
 
 // Configuration OpenAI
-const openai = new OpenAIApi(new Configuration({
+const configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY
-}));
+});
+const openai = new OpenAIApi(configuration);
 
 // Fonction chatbot
 async function askOpenAI(question) {
