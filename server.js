@@ -10,7 +10,7 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
 const axios = require("axios");
-const { Configuration, OpenAIApi } = require("openai");
+const { OpenAIApi, Configuration } = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,16 +23,16 @@ app.use(morgan("combined"));
 
 // Limiteur de requêtes
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
-    message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Limite à 1000 requêtes par fenêtre
+    message: "🚫 Vous avez atteint la limite de requêtes. Essayez plus tard."
 });
 app.use(limiter);
 
 // Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
-    .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
+    .then(() => console.log("💾 Connecté à MongoDB"))
+    .catch(err => console.error("❌ Erreur de connexion à MongoDB:", err));
 
 // Schéma des données
 const EnergySchema = new mongoose.Schema({
@@ -52,7 +52,7 @@ const EnergyModel = mongoose.model("Energy", EnergySchema);
 // Connexion MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 client.on("connect", () => {
-    console.log("🔗 متصل بخادم MQTT");
+    console.log("🔗 Connecté au serveur MQTT");
     client.subscribe("maison/energie");
 });
 client.on("message", (topic, message) => {
@@ -70,16 +70,16 @@ client.on("message", (topic, message) => {
             level: data.level ?? null
         });
         newEntry.save()
-            .then(() => console.log("✅ تم حفظ بيانات MQTT بنجاح:", newEntry))
-            .catch(err => console.error("❌ خطأ أثناء حفظ البيانات:", err));
+            .then(() => console.log("✅ Données MQTT sauvegardées avec succès:", newEntry))
+            .catch(err => console.error("❌ Erreur de sauvegarde des données:", err));
     } catch (error) {
-        console.error("⚠️ خطأ في تحويل رسالة MQTT إلى JSON:", error);
+        console.error("⚠️ Erreur lors de la conversion du message MQTT en JSON:", error);
     }
 });
 
 // Routes API classiques
 app.get("/", (req, res) => {
-    res.send("🚀 الخادم يعمل بنجاح!");
+    res.send("🚀 Le serveur fonctionne avec succès!");
 });
 
 app.get("/energy", async (req, res) => {
@@ -87,7 +87,7 @@ app.get("/energy", async (req, res) => {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(250);
         res.json(data);
     } catch (error) {
-        res.status(500).send("خطأ في جلب البيانات.");
+        res.status(500).send("Erreur lors de la récupération des données.");
     }
 });
 
@@ -110,9 +110,9 @@ app.post("/energy", async (req, res) => {
     try {
         const newData = new EnergyModel(req.body);
         await newData.save();
-        res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
+        res.status(201).json({ message: "📊 Données sauvegardées avec succès!" });
     } catch (error) {
-        res.status(500).send("خطأ أثناء حفظ البيانات.");
+        res.status(500).send("Erreur lors de la sauvegarde des données.");
     }
 });
 
@@ -128,27 +128,27 @@ async function askOpenAI(question) {
         const response = await openai.createChatCompletion({
             model: "gpt-3.5-turbo",
             messages: [
-                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "system", content: "Vous êtes un assistant intelligent spécialisé dans la gestion de l'énergie." },
                 { role: "user", content: question }
             ]
         });
         return response.data.choices[0].message.content.trim();
     } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
-        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+        console.error("❌ Erreur lors de la communication avec OpenAI:", error.response?.data || error.message);
+        throw new Error("Erreur lors de la communication avec OpenAI.");
     }
 }
 
 // Endpoint chatbot
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
-    if (!question) return res.status(400).send("يرجى إرسال سؤال.");
+    if (!question) return res.status(400).send("Veuillez poser une question.");
 
     try {
         const answer = await askOpenAI(question);
         res.json({ answer });
     } catch (error) {
-        res.status(500).send("❌ خطأ أثناء الحصول على الإجابة من OpenAI.");
+        res.status(500).send("❌ Erreur lors de l'obtention de la réponse d'OpenAI.");
     }
 });
 
@@ -157,9 +157,9 @@ const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
         info: {
-            title: "API إدارة الطاقة وكشف الغاز",
+            title: "API de gestion de l'énergie et détection de gaz",
             version: "1.0.0",
-            description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
+            description: "API pour collecter des données sur la consommation d'énergie, d'eau et de gaz"
         },
         servers: [{ url: `http://localhost:${PORT}` }]
     },
@@ -170,5 +170,5 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
 // Démarrage
 app.listen(PORT, () => {
-    console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
+    console.log(`🚀 Le serveur fonctionne sur http://localhost:${PORT}`);
 });
