@@ -9,12 +9,12 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const OpenAI = require("openai"); // 🔁 Corrigé ici
+const { OpenAI } = require("openai"); // النسخة الجديدة
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// ✅ الوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
@@ -27,12 +27,12 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Connexion à MongoDB
+// ✅ الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
+    .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Schéma et Modèle
+// ✅ نموذج البيانات
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -47,12 +47,14 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// MQTT
+// ✅ الاتصال بـ MQTT (تأكد من عدم تكرار المتغير)
 const client = mqtt.connect(process.env.MQTT_BROKER);
+
 client.on("connect", () => {
-    console.log("🔗 متصل بخادم MQTT");
+    console.log("🔗 تم الاتصال بـ MQTT");
     client.subscribe("maison/energie");
 });
+
 client.on("message", (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
@@ -67,17 +69,19 @@ client.on("message", (topic, message) => {
             gasDetected: data.gasDetected ?? null,
             level: data.level ?? null
         });
+
         newEntry.save()
             .then(() => console.log("✅ تم حفظ بيانات MQTT بنجاح:", newEntry))
-            .catch(err => console.error("❌ خطأ أثناء حفظ البيانات:", err));
+            .catch(err => console.error("❌ خطأ أثناء الحفظ:", err));
     } catch (error) {
-        console.error("⚠️ خطأ في تحويل رسالة MQTT إلى JSON:", error);
+        console.error("⚠️ خطأ في تحويل البيانات من JSON:", error);
     }
 });
 
-// Routes API
+// ✅ المسارات API
+
 app.get("/", (req, res) => {
-    res.send("🚀 الخادم يعمل بنجاح!");
+    res.send("🚀 الخادم يعمل!");
 });
 
 app.get("/energy", async (req, res) => {
@@ -85,7 +89,7 @@ app.get("/energy", async (req, res) => {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(250);
         res.json(data);
     } catch (error) {
-        res.status(500).send("خطأ في جلب البيانات.");
+        res.status(500).send("❌ خطأ في جلب البيانات.");
     }
 });
 
@@ -110,16 +114,16 @@ app.post("/energy", async (req, res) => {
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
-        res.status(500).send("خطأ أثناء حفظ البيانات.");
+        res.status(500).send("❌ خطأ أثناء الحفظ.");
     }
 });
 
-// OpenAI Configuration avec v4
+// ✅ تكوين OpenAI
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-// Fonction du chatbot
+// ✅ دالة المحادثة مع ChatGPT
 async function askOpenAI(question) {
     try {
         const response = await openai.chat.completions.create({
@@ -131,25 +135,25 @@ async function askOpenAI(question) {
         });
         return response.choices[0].message.content.trim();
     } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
         throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
     }
 }
 
-// Route du chatbot
+// ✅ مسار المحادثة
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
-    if (!question) return res.status(400).send("يرجى إرسال سؤال.");
+    if (!question) return res.status(400).send("يرجى إدخال سؤال.");
 
     try {
         const answer = await askOpenAI(question);
         res.json({ answer });
     } catch (error) {
-        res.status(500).send("❌ خطأ أثناء الحصول على الإجابة من OpenAI.");
+        res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
     }
 });
 
-// Swagger
+// ✅ توثيق Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -165,7 +169,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Démarrer le serveur
+// ✅ بدء الخادم
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
