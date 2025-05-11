@@ -9,7 +9,7 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const { Configuration, OpenAIApi } = require("openai");
+const OpenAI = require("openai"); // 🔁 Corrigé ici
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,7 +20,6 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Limiteur de requêtes
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,
@@ -33,7 +32,7 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Modèle de données
+// Schéma et Modèle
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -48,7 +47,7 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// Connexion au broker MQTT
+// MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 client.on("connect", () => {
     console.log("🔗 متصل بخادم MQTT");
@@ -115,23 +114,22 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// OpenAI API Configuration ✅ ✅ ✅
-const configuration = new Configuration({
+// OpenAI Configuration avec v4
+const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
-const openai = new OpenAIApi(configuration);
 
 // Fonction du chatbot
 async function askOpenAI(question) {
     try {
-        const response = await openai.createChatCompletion({
+        const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
                 { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
                 { role: "user", content: question }
             ]
         });
-        return response.data.choices[0].message.content.trim();
+        return response.choices[0].message.content.trim();
     } catch (error) {
         console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
         throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
@@ -151,7 +149,7 @@ app.post("/chatbot", async (req, res) => {
     }
 });
 
-// Swagger Docs
+// Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -167,7 +165,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Lancer le serveur
+// Démarrer le serveur
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
