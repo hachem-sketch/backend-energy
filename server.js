@@ -86,7 +86,7 @@ app.get("/", (req, res) => {
 
 app.get("/energy", async (req, res) => {
     try {
-        const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(250);
+        const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
         res.json(data);
     } catch (error) {
         res.status(500).send("❌ خطأ في جلب البيانات.");
