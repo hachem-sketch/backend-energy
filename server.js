@@ -1,4 +1,4 @@
-// 🧩 الاستدعاءات الأولية
+// 📦 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -15,7 +15,7 @@ const { OpenAI } = require("openai");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 🔐 الوسيطات (Middleware)
+// 🔐 الأمان والوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
