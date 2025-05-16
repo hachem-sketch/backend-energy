@@ -1,3 +1,4 @@
+// 📦 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -9,17 +10,18 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const { OpenAI } = require("openai"); // النسخة الجديدة
+const { OpenAI } = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ الوسيطات
+// 🔐 الأمان والوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
+// ⚙️ تحديد حد للطلبات
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 1000,
@@ -27,12 +29,12 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// ✅ الاتصال بقاعدة البيانات MongoDB
+// 🛢️ الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// ✅ نموذج البيانات
+// 📊 نموذج البيانات
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -47,11 +49,11 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// ✅ الاتصال بـ MQTT (تأكد من عدم تكرار المتغير)
+// 📡 الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
-    console.log("🔗 تم الاتصال بـ MQTT");
+    console.log("🔗 تم الاتصال بخادم MQTT");
     client.subscribe("maison/energie");
 });
 
@@ -78,7 +80,28 @@ client.on("message", (topic, message) => {
     }
 });
 
-// ✅ المسارات API
+// 🤖 إعداد Chatbot مع OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+async function askOpenAI(question) {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "user", content: question }
+            ]
+        });
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
+        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+    }
+}
+
+// 📡 المسارات API
 
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل!");
@@ -118,29 +141,7 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// ✅ تكوين OpenAI
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
-
-// ✅ دالة المحادثة مع ChatGPT
-async function askOpenAI(question) {
-    try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
-                { role: "user", content: question }
-            ]
-        });
-        return response.choices[0].message.content.trim();
-    } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
-        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
-    }
-}
-
-// ✅ مسار المحادثة
+// 💬 مسار روبوت المحادثة
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
     if (!question) return res.status(400).send("يرجى إدخال سؤال.");
@@ -153,7 +154,7 @@ app.post("/chatbot", async (req, res) => {
     }
 });
 
-// ✅ توثيق Swagger
+// 📚 توثيق Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -169,7 +170,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// ✅ بدء الخادم
+// 🚀 تشغيل الخادم
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
