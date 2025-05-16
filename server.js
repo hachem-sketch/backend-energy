@@ -86,6 +86,7 @@ const openai = new OpenAI({
 });
 
 async function askOpenAI(question) {
+    console.log("🔑 مفتاح OpenAI:", process.env.OPENAI_API_KEY); // <-- تم إضافة هذا السطر هنا
     try {
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
