@@ -86,7 +86,6 @@ const openai = new OpenAI({
 });
 
 async function askOpenAI(question) {
-    console.log("🔑 مفتاح OpenAI:", process.env.OPENAI_API_KEY); // <-- تم إضافة هذا السطر هنا
     try {
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
@@ -97,7 +96,7 @@ async function askOpenAI(question) {
         });
         return response.choices[0].message.content.trim();
     } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
         throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
     }
 }
