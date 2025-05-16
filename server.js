@@ -85,22 +85,18 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-async function askOpenAI(question) {
+app.get("/test-openai", async (req, res) => {
     try {
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
-                { role: "user", content: question }
-            ]
+            messages: [{ role: "user", content: "مرحبا" }]
         });
-        return response.choices[0].message.content.trim();
+        res.send(response.choices[0].message.content);
     } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
-        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
+        res.status(500).send("فشل في الاتصال بـ OpenAI");
     }
-}
-
+});
 // 📡 المسارات API
 
 app.get("/", (req, res) => {
