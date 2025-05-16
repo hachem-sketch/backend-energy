@@ -1,4 +1,4 @@
-// 📦 الاستدعاءات الأولية
+// 🧩 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -15,7 +15,7 @@ const { OpenAI } = require("openai");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 🔐 الأمان والوسيطات
+// 🔐 الوسيطات (Middleware)
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
@@ -85,18 +85,22 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
-app.get("/test-openai", async (req, res) => {
+async function askOpenAI(question) {
     try {
         const response = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: "مرحبا" }]
+            messages: [
+                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "user", content: question }
+            ]
         });
-        res.send(response.choices[0].message.content);
+        return response.choices[0].message.content.trim();
     } catch (error) {
-        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
-        res.status(500).send("فشل في الاتصال بـ OpenAI");
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.message);
+        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
     }
-});
+}
+
 // 📡 المسارات API
 
 app.get("/", (req, res) => {
@@ -147,6 +151,20 @@ app.post("/chatbot", async (req, res) => {
         res.json({ answer });
     } catch (error) {
         res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
+    }
+});
+
+// 🧪 مسار اختبار OpenAI
+app.get("/test-openai", async (req, res) => {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: "مرحبا" }]
+        });
+        res.send(response.choices[0].message.content);
+    } catch (error) {
+        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
+        res.status(500).send("فشل في الاتصال بـ OpenAI");
     }
 });
 
