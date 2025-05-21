@@ -10,12 +10,12 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const axios = require("axios"); // ✅ استبدال openai بـ axios
+const { OpenAI } = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 🔐 الأمان والوسيطات
+// 🔐 أمان ووسائط
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
@@ -23,18 +23,18 @@ app.use(morgan("combined"));
 
 // ⚙️ تحديد حد للطلبات
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 دقيقة
     max: 1000,
     message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// 🛢️ الاتصال بقاعدة البيانات MongoDB
+// 🛢️ الاتصال بقاعدة بيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// 📊 نموذج البيانات
+// 📊 نموذج بيانات الطاقة
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -54,7 +54,11 @@ const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
     console.log("🔗 تم الاتصال بخادم MQTT");
-    client.subscribe("maison/energie");
+    client.subscribe("maison/energie", (err) => {
+        if (err) {
+            console.error("❌ خطأ في الاشتراك بـ MQTT:", err);
+        }
+    });
 });
 
 client.on("message", (topic, message) => {
@@ -80,37 +84,35 @@ client.on("message", (topic, message) => {
     }
 });
 
-// 🤖 استعلام OpenAI باستخدام axios
+// 🤖 إعداد OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+// دالة استدعاء OpenAI
 async function askOpenAI(question) {
     try {
-        const response = await axios.post(
-            "https://api.openai.com/v1/chat/completions",
-            {
-                model: "gpt-3.5-turbo",
-                messages: [
-                    { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
-                    { role: "user", content: question }
-                ]
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
-        return response.data.choices[0].message.content.trim();
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "user", content: question }
+            ]
+        });
+        return response.choices[0].message.content.trim();
     } catch (error) {
         console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
         throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
     }
 }
 
-// 📡 المسارات API
+// 📡 مسارات API
+
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل!");
 });
 
+// جلب آخر 2000 سجل بيانات طاقة
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
@@ -120,6 +122,7 @@ app.get("/energy", async (req, res) => {
     }
 });
 
+// استقبال بيانات طاقة جديدة
 app.post("/energy", async (req, res) => {
     const schema = Joi.object({
         temperature: Joi.number(),
@@ -145,7 +148,7 @@ app.post("/energy", async (req, res) => {
     }
 });
 
-// 💬 مسار روبوت المحادثة
+// مسار روبوت المحادثة
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
     if (!question) return res.status(400).send("يرجى إدخال سؤال.");
@@ -158,17 +161,21 @@ app.post("/chatbot", async (req, res) => {
     }
 });
 
-// 🧪 مسار اختبار OpenAI
+// مسار اختبار OpenAI
 app.get("/test-openai", async (req, res) => {
     try {
-        const response = await askOpenAI("مرحبا");
-        res.send(response);
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: "مرحبا" }]
+        });
+        res.send(response.choices[0].message.content);
     } catch (error) {
+        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
         res.status(500).send("فشل في الاتصال بـ OpenAI");
     }
 });
 
-// 📚 توثيق Swagger
+// توثيق Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -179,7 +186,7 @@ const swaggerOptions = {
         },
         servers: [{ url: `http://localhost:${PORT}` }]
     },
-    apis: ["server.js"]
+    apis: ["./server.js"]
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
