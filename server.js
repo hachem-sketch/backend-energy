@@ -10,7 +10,7 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const { OpenAI } = require("openai");
+const axios = require("axios"); // ✅ استبدال openai بـ axios
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -80,21 +80,26 @@ client.on("message", (topic, message) => {
     }
 });
 
-// 🤖 إعداد Chatbot مع OpenAI
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
-
+// 🤖 استعلام OpenAI باستخدام axios
 async function askOpenAI(question) {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
-                { role: "user", content: question }
-            ]
-        });
-        return response.choices[0].message.content.trim();
+        const response = await axios.post(
+            "https://api.openai.com/v1/chat/completions",
+            {
+                model: "gpt-3.5-turbo",
+                messages: [
+                    { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                    { role: "user", content: question }
+                ]
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+        return response.data.choices[0].message.content.trim();
     } catch (error) {
         console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
         throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
@@ -102,7 +107,6 @@ async function askOpenAI(question) {
 }
 
 // 📡 المسارات API
-
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل!");
 });
@@ -157,13 +161,9 @@ app.post("/chatbot", async (req, res) => {
 // 🧪 مسار اختبار OpenAI
 app.get("/test-openai", async (req, res) => {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: "مرحبا" }]
-        });
-        res.send(response.choices[0].message.content);
+        const response = await askOpenAI("مرحبا");
+        res.send(response);
     } catch (error) {
-        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
         res.status(500).send("فشل في الاتصال بـ OpenAI");
     }
 });
