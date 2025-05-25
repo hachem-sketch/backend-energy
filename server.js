@@ -6,48 +6,36 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
-const { HfInference } = require('@huggingface/inference'); // Remplacement OpenAI
+const { HfInference } = require('@huggingface/inference');
 const Joi = require('joi');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// Vérification des variables d'environnement
-const requiredEnvVars = ['MONGO_URI', 'MQTT_BROKER', 'HF_TOKEN'];
-requiredEnvVars.forEach(envVar => {
-  if (!process.env[envVar]) {
-    console.error(`❌ Variable manquante: ${envVar}`);
-    process.exit(1);
-  }
-});
-
-// Middleware sécurisé
+// Configuration de base
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*'
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  methods: ['GET', 'POST']
 }));
 app.use(helmet());
 app.use(express.json({ limit: '10kb' }));
 app.use(morgan('dev'));
 
-// Limitation de requêtes
+// Limitation des requêtes
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
   max: 500,
   message: 'Trop de requêtes depuis cette IP'
 });
 app.use('/api/', limiter);
 
-// Connexion MongoDB optimisée
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000
-})
-.then(() => console.log('✅ Connecté à MongoDB'))
-.catch(err => {
-  console.error('❌ Erreur MongoDB:', err.message);
-  process.exit(1);
-});
+// Connexion à MongoDB (version moderne)
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ Connecté à MongoDB'))
+  .catch(err => {
+    console.error('❌ Erreur MongoDB:', err.message);
+    process.exit(1);
+  });
 
 // Schéma Mongoose amélioré
 const EnergySchema = new mongoose.Schema({
@@ -65,23 +53,24 @@ const EnergySchema = new mongoose.Schema({
 
 const EnergyModel = mongoose.model('Energy', EnergySchema);
 
-// Connexion MQTT avec gestion d'erreurs
+// Configuration MQTT
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER, {
-  reconnectPeriod: 5000
+  reconnectPeriod: 5000,
+  clientId: `nawerli-${Math.random().toString(16).substr(2, 8)}`
 });
 
 mqttClient.on('connect', () => {
   console.log('🔗 Connecté à MQTT');
-  mqttClient.subscribe('maison/energie', { qos: 1 }, err => {
-    if (err) console.error('❌ Erreur MQTT:', err);
+  mqttClient.subscribe('maison/energie', { qos: 1 }, (err) => {
+    if (err) console.error('❌ Erreur subscription MQTT:', err);
   });
 });
 
-mqttClient.on('message', async (topic, msg) => {
+mqttClient.on('message', async (topic, message) => {
   try {
-    const data = JSON.parse(msg.toString());
+    const data = JSON.parse(message.toString());
     await EnergyModel.create(data);
-    console.log(`📊 Données sauvegardées: ${data.timestamp}`);
+    console.log(`📊 Données MQTT sauvegardées: ${new Date().toISOString()}`);
   } catch (err) {
     console.error('⚠️ Erreur traitement MQTT:', err.message);
   }
@@ -90,34 +79,45 @@ mqttClient.on('message', async (topic, msg) => {
 // Initialisation Hugging Face
 const hf = new HfInference(process.env.HF_TOKEN);
 
-async function askAI(question) {
+async function getAIResponse(question) {
   try {
     const response = await hf.textGeneration({
       model: 'microsoft/DialoGPT-medium-arabic',
       inputs: `أنت خبير في الطاقة. ${question}`,
       parameters: {
         max_length: 200,
-        temperature: 0.7
+        temperature: 0.7,
+        do_sample: true
       }
     });
     return response.generated_text;
   } catch (err) {
     console.error('❌ Erreur Hugging Face:', err.message);
-    throw new Error('Service IA indisponible');
+    throw new Error('خدمة الذكاء الاصطناعي غير متوفرة حاليا');
   }
 }
 
-// Routes API
+// Routes API avec préfixe /api
+app.get('/api/status', (req, res) => {
+  res.json({ 
+    status: 'active',
+    services: {
+      mongoDB: mongoose.connection.readyState === 1,
+      mqtt: mqttClient.connected
+    }
+  });
+});
+
 app.get('/api/energy', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 1000;
+    const limit = Math.min(parseInt(req.query.limit) || 1000, 5000);
     const data = await EnergyModel.find()
       .sort('-timestamp')
       .limit(limit)
       .lean();
     res.json(data);
   } catch (err) {
-    res.status(500).json({ error: 'Erreur base de données' });
+    res.status(500).json({ error: 'خطأ في قاعدة البيانات' });
   }
 });
 
@@ -130,7 +130,7 @@ app.post('/api/chatbot', async (req, res) => {
   if (error) return res.status(400).json({ error: error.details[0].message });
 
   try {
-    const answer = await askAI(req.body.question);
+    const answer = await getAIResponse(req.body.question);
     res.json({ answer });
   } catch (err) {
     res.status(503).json({ error: err.message });
@@ -140,14 +140,15 @@ app.post('/api/chatbot', async (req, res) => {
 // Gestion des erreurs
 app.use((err, req, res, next) => {
   console.error('💥 Erreur:', err.stack);
-  res.status(500).json({ error: 'Erreur interne' });
+  res.status(500).json({ error: 'خطأ داخلي في الخادم' });
 });
 
-// Démarrage du serveur
+// Démarrer le serveur
 app.listen(PORT, () => {
   console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
 });
 
+// Gestion propre de la fermeture
 process.on('SIGTERM', () => {
   console.log('🛑 Arrêt du serveur');
   mongoose.connection.close();
