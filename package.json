@@ -22,6 +22,7 @@
     "mongoose": "^8.13.2",
     "morgan": "^1.10.0",
     "mqtt": "^5.10.4",
+    "openai": "^4.103.0",
     "socket.io": "^4.8.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
